@@ -16,6 +16,7 @@ int main(int argc, char *argv[]) {
 
     // 2. 建立 RTSP Server 物件
     server = gst_rtsp_server_new();
+    gst_rtsp_server_set_address(server, "192.168.50.75"); // 設定 IP
     gst_rtsp_server_set_service(server, "8554"); // 設定 Port
 
     // 3. 取得掛載點 (Mount Points) 管理器
@@ -42,7 +43,7 @@ int main(int argc, char *argv[]) {
     gst_rtsp_server_attach(server, NULL);
 
     std::cout << "GStreamer RTSP Server is running (C++)..." << std::endl;
-    std::cout << "Stream ready at rtsp://127.0.0.1:8554/test" << std::endl;
+    std::cout << "Stream ready at rtsp://192.168.50.75:8554/test" << std::endl;
 
     // 進入主迴圈，程式會停在這裡直到被終止
     g_main_loop_run(loop);

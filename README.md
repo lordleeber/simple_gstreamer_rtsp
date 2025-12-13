@@ -88,12 +88,12 @@ cd build
     cap = cv2.VideoCapture(rtsp_url)
 
     if not cap.isOpened():
-        print("錯誤：無法開啟 RTSP 串流。если")
+        print("錯誤：無法開啟 RTSP 串流")
     else:
         while True:
             ret, frame = cap.read()
             if not ret:
-                print("抓取影像失敗。")
+                print("抓取影像失敗")
                 break
             cv2.imshow("RTSP Stream", frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -101,4 +101,4 @@ cd build
         cap.release()
         cv2.destroyAllWindows()
     ```
-如果您在使用 Python 客戶端時遇到問題，請確保您的 OpenCV 是在與 GStreamer 連結的情況下安裝的。
+如果您在使用 Python 客戶端時遇到問題，請確保您的 OpenCV 是在與 GStreamer 連結的情況下安裝的

@@ -27,3 +27,18 @@ target_link_libraries(rtsp_server PRIVATE
     ${GST_LIBRARIES}
     ${GST_RTSP_LIBRARIES}
 )
+
+# --- RTSP Client ---
+# 定義客戶端執行檔 (rtsp_client) 和來源檔案 (rtsp_client.cpp)
+add_executable(rtsp_client rtsp_client.cpp)
+
+# 為客戶端加入標頭檔路徑
+target_include_directories(rtsp_client PRIVATE 
+    ${GST_INCLUDE_DIRS}
+)
+
+# 為客戶端加入連結庫
+target_link_libraries(rtsp_client PRIVATE 
+    ${GST_LIBRARIES}
+)
+
