@@ -1,6 +1,7 @@
 #include <gst/gst.h>
 #include <gst/rtsp-server/rtsp-server.h>
 #include <iostream>
+#include "rtsp_config.h"
 
 int main(int argc, char *argv[]) {
     GMainLoop *loop;
@@ -16,8 +17,8 @@ int main(int argc, char *argv[]) {
 
     // 2. 建立 RTSP Server 物件
     server = gst_rtsp_server_new();
-    gst_rtsp_server_set_address(server, "192.168.50.75"); // 設定 IP
-    gst_rtsp_server_set_service(server, "8554"); // 設定 Port
+    gst_rtsp_server_set_address(server, RTSP_HOST); // 設定 IP
+    gst_rtsp_server_set_service(server, RTSP_PORT); // 設定 Port
 
     // 3. 取得掛載點 (Mount Points) 管理器
     mounts = gst_rtsp_server_get_mount_points(server);
@@ -29,12 +30,13 @@ int main(int argc, char *argv[]) {
     // 注意：rtph264pay 的 name=pay0 是 RTSP Server 協定必須的
     gst_rtsp_media_factory_set_launch(factory, 
         "( v4l2src device=/dev/video0 ! videoconvert ! x264enc tune=zerolatency speed-preset=ultrafast ! rtph264pay name=pay0 pt=96 )");
+        // "( v4l2src device=/dev/video0 ! videoconvert ! x264enc tune=zerolatency speed-preset=ultrafast ! video/x-h264, stream-format=byte-stream ! rtph264pay name=pay0 pt=96 )"); 
 
     // 告知 Factory 這是共享的串流 (多人看同一個畫面，而不是每個人開一個新鏡頭)
     gst_rtsp_media_factory_set_shared(factory, TRUE);
 
     // 5. 將 Factory 掛載到路徑 /test
-    gst_rtsp_mount_points_add_factory(mounts, "/test", factory);
+    gst_rtsp_mount_points_add_factory(mounts, RTSP_PATH, factory);
 
     // 清理物件引用計數 (mounts 已經加入 server，這裡可以 unref)
     g_object_unref(mounts);
@@ -43,7 +45,7 @@ int main(int argc, char *argv[]) {
     gst_rtsp_server_attach(server, NULL);
 
     std::cout << "GStreamer RTSP Server is running (C++)..." << std::endl;
-    std::cout << "Stream ready at rtsp://192.168.50.75:8554/test" << std::endl;
+    std::cout << "Stream ready at " << RTSP_URL << std::endl;
 
     // 進入主迴圈，程式會停在這裡直到被終止
     g_main_loop_run(loop);

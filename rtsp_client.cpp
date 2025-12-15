@@ -1,5 +1,6 @@
 #include <gst/gst.h>
 #include <iostream>
+#include "rtsp_config.h"
 
 int main(int argc, char *argv[]) {
     GstElement *pipeline;
@@ -13,7 +14,8 @@ int main(int argc, char *argv[]) {
 
     // 2. 建立 Pipeline
     // 使用 gst_parse_launch，語法和 gst-launch-1.0 指令相同
-    const char *pipeline_str = "rtspsrc location=rtsp://192.168.50.75:8554/test ! decodebin ! autovideosink";
+    // const char *pipeline_str = "rtspsrc location=rtsp://192.168.144.217:8554/test ! decodebin ! autovideosink";
+    const char *pipeline_str = "rtspsrc location=" RTSP_URL " ! decodebin ! autovideosink";
     pipeline = gst_parse_launch(pipeline_str, NULL);
 
     if (!pipeline) {

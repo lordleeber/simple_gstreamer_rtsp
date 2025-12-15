@@ -102,3 +102,42 @@ cd build
         cv2.destroyAllWindows()
     ```
 如果您在使用 Python 客戶端時遇到問題，請確保您的 OpenCV 是在與 GStreamer 連結的情況下安裝的
+
+## 疑難排解 (Troubleshooting)
+
+### 執行時出現 `symbol lookup error`
+
+**症狀**
+
+在執行 `rtsp_server`、`rtsp_client` 或其他相關程式時，您可能會遇到類似以下的錯誤訊息：
+```
+symbol lookup error: /snap/core20/current/lib/x86_64-linux-gnu/libpthread.so.0: undefined symbol: __libc_pthread_init, version GLIBC_PRIVATE
+```
+
+**原因**
+
+這個錯誤通常是由於環境變數衝突所引起的，特別是當您的 shell 環境（例如 `~/.bashrc`）中設定了來自 **ROS (Robot Operating System)** 的環境。ROS 的設定腳本會修改 `LD_LIBRARY_PATH` 變數，這可能導致程式載入了一個與系統不相容的函式庫版本（例如從 Snap 套件中載入），從而產生衝突。
+
+**解決方案**
+
+您可以選擇以下任一種方法來解決這個問題：
+
+1.  **臨時解決方案：**
+    在執行指令前，暫時清除 `LD_LIBRARY_PATH` 變數。這種方法不會影響您目前的 shell 環境設定。
+    ```bash
+    LD_LIBRARY_PATH="" ./rtsp_server
+    ```
+    或者
+    ```bash
+    LD_LIBRARY_PATH="" ./rtsp_client
+    ```
+
+2.  **永久解決方案：**
+    如果您不需要在所有終端機中都啟用 ROS 環境，建議修改您的 shell 設定檔。
+    *   開啟您的 `~/.bashrc` 或 `~/.zshrc` 檔案。
+    *   找到類似 `source /opt/ros/<distro>/setup.bash` 的那一行。
+    *   將其 **註解掉** (在行首加上 `#`) 或 **刪除**。
+    *   未來只在您需要使用 ROS 的特定終端機視窗中，手動執行 `source /opt/ros/<distro>/setup.bash` 指令來啟用 ROS 環境。
+
+這樣做可以將 ROS 的環境與其他開發工作隔離開，從根本上避免函式庫衝突。
+
