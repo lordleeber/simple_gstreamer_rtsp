@@ -1,54 +1,82 @@
 #include <gst/gst.h>
 #include <gst/rtsp-server/rtsp-server.h>
+#include <glib.h>
 #include <iostream>
+#include <sstream>
 #include "rtsp_config.h"
 
-int main(int argc, char *argv[]) {
-    GMainLoop *loop;
-    GstRTSPServer *server;
-    GstRTSPMountPoints *mounts;
-    GstRTSPMediaFactory *factory;
+// 建立與接收端相容的 pipeline 字串
+// 接收端使用: rtspsrc ! rtph264depay ! h264parse ! nvv4l2decoder ! nvvidconv
+// 因此 server 需要輸出標準 H.264 RTP 串流
+static std::string build_pipeline() {
+    std::ostringstream oss;
 
-    // 1. 初始化 GStreamer
+    oss << "( "
+        // 影像來源：V4L2 攝影機輸出 MJPG，解碼後直接編碼，不在 server 端縮放
+        // client 端透過 nvvidconv caps 自行縮放至所需解析度
+        << "v4l2src device=" << VIDEO_DEVICE << " ! "
+        << "image/jpeg,width=" << CAM_WIDTH
+        << ",height=" << CAM_HEIGHT << " ! "
+        << "jpegdec ! "
+
+        // 轉換色彩空間以供 x264enc 使用
+        << "videoconvert ! "
+
+        // H.264 軟體編碼
+        // tune=zerolatency : 最小化編碼延遲，配合接收端 latency=41
+        // speed-preset=ultrafast : 最快速度，降低 CPU 使用
+        // key-int-max : 控制 IDR 關鍵幀間隔
+        << "x264enc"
+        << " tune=zerolatency"
+        << " speed-preset=ultrafast"
+        << " bitrate=" << H264_BITRATE
+        << " key-int-max=" << H264_KEY_INT << " ! "
+
+        // 確保輸出 byte-stream 格式，h264parse 在接收端會處理格式轉換
+        << "video/x-h264,stream-format=byte-stream ! "
+
+        // RTP 封包
+        // config-interval=-1 : 每個 IDR frame 都附帶 SPS/PPS，
+        //                       讓接收端隨時加入都能正確解碼
+        // pt=96              : 動態 payload type，標準 H.264 慣例
+        << "rtph264pay name=pay0 pt=96 config-interval=-1"
+        << " )";
+
+    return oss.str();
+}
+
+int main(int argc, char *argv[]) {
     gst_init(&argc, &argv);
 
-    // 建立主迴圈 (Main Loop)，這是 GLib/GStreamer 的核心
-    loop = g_main_loop_new(NULL, FALSE);
+    GMainLoop *loop = g_main_loop_new(NULL, FALSE);
 
-    // 2. 建立 RTSP Server 物件
-    server = gst_rtsp_server_new();
-    gst_rtsp_server_set_address(server, RTSP_HOST); // 設定 IP
-    gst_rtsp_server_set_service(server, RTSP_PORT); // 設定 Port
+    // 建立 RTSP Server
+    GstRTSPServer *server = gst_rtsp_server_new();
+    gst_rtsp_server_set_address(server, RTSP_HOST);
+    gst_rtsp_server_set_service(server, RTSP_PORT);
 
-    // 3. 取得掛載點 (Mount Points) 管理器
-    mounts = gst_rtsp_server_get_mount_points(server);
+    // 建立 Media Factory
+    GstRTSPMountPoints *mounts = gst_rtsp_server_get_mount_points(server);
+    GstRTSPMediaFactory *factory = gst_rtsp_media_factory_new();
 
-    // 4. 建立 Media Factory (負責生成串流)
-    factory = gst_rtsp_media_factory_new();
+    std::string pipeline = build_pipeline();
+    std::cout << "[Pipeline] " << pipeline << std::endl;
 
-    // 設定 Pipeline
-    // 注意：rtph264pay 的 name=pay0 是 RTSP Server 協定必須的
-    gst_rtsp_media_factory_set_launch(factory, 
-        "( v4l2src device=/dev/video0 ! videoconvert ! x264enc tune=zerolatency speed-preset=ultrafast ! rtph264pay name=pay0 pt=96 )");
-        // "( v4l2src device=/dev/video0 ! videoconvert ! x264enc tune=zerolatency speed-preset=ultrafast ! video/x-h264, stream-format=byte-stream ! rtph264pay name=pay0 pt=96 )"); 
+    gst_rtsp_media_factory_set_launch(factory, pipeline.c_str());
 
-    // 告知 Factory 這是共享的串流 (多人看同一個畫面，而不是每個人開一個新鏡頭)
+    // shared=TRUE：所有連線的 client 共用同一路串流，不重複開啟攝影機
     gst_rtsp_media_factory_set_shared(factory, TRUE);
 
-    // 5. 將 Factory 掛載到路徑 /test
     gst_rtsp_mount_points_add_factory(mounts, RTSP_PATH, factory);
-
-    // 清理物件引用計數 (mounts 已經加入 server，這裡可以 unref)
     g_object_unref(mounts);
 
-    // 6. 啟動 Server
     gst_rtsp_server_attach(server, NULL);
 
-    std::cout << "GStreamer RTSP Server is running (C++)..." << std::endl;
-    std::cout << "Stream ready at " << RTSP_URL << std::endl;
+    std::cout << "RTSP Server running at " << RTSP_URL << std::endl;
 
-    // 進入主迴圈，程式會停在這裡直到被終止
     g_main_loop_run(loop);
 
+    g_main_loop_unref(loop);
+    g_object_unref(server);
     return 0;
 }
