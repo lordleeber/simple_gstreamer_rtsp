@@ -16,14 +16,15 @@ static std::string build_pipeline() {
         // client 端透過 nvvidconv caps 自行縮放至所需解析度
         << "v4l2src device=" << VIDEO_DEVICE << " ! "
         << "image/jpeg,width=" << CAM_WIDTH
-        << ",height=" << CAM_HEIGHT << " ! "
+        << ",height=" << CAM_HEIGHT
+        << ",framerate=" << VIDEO_FPS << "/1 ! "
         << "jpegdec ! "
 
         // 轉換色彩空間以供 x264enc 使用
         << "videoconvert ! "
 
         // H.264 軟體編碼
-        // tune=zerolatency : 最小化編碼延遲，配合接收端 latency=41
+        // tune=zerolatency : 最小化編碼延遲，配合接收端 latency=250
         // speed-preset=ultrafast : 最快速度，降低 CPU 使用
         // key-int-max : 控制 IDR 關鍵幀間隔
         << "x264enc"
