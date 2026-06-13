@@ -6,9 +6,16 @@
 #define RTSP_URL     "rtsp://" RTSP_HOST ":" RTSP_PORT RTSP_PATH
 
 // 影像來源
-#define VIDEO_DEVICE "/dev/video0"
-#define CAM_WIDTH    1920   // 相機原生解析度（即串流輸出解析度）
-#define CAM_HEIGHT   1080
+#ifdef _WIN32
+    // Windows: Media Foundation 攝影機裝置索引 (0 = 第一顆攝影機)
+    #define VIDEO_DEVICE_INDEX 0
+#else
+    // Linux: V4L2 裝置路徑
+    #define VIDEO_DEVICE "/dev/video0"
+#endif
+
+#define CAM_WIDTH    1280
+#define CAM_HEIGHT   720
 #define VIDEO_FPS    30
 
 // 編碼參數

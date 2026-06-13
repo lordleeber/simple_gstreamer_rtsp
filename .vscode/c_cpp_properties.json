@@ -1,6 +1,22 @@
 {
     "configurations": [
         {
+            "name": "Windows",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "C:/Program Files/gstreamer/1.0/mingw_x86_64/include/gstreamer-1.0",
+                "C:/Program Files/gstreamer/1.0/mingw_x86_64/include/glib-2.0",
+                "C:/Program Files/gstreamer/1.0/mingw_x86_64/lib/glib-2.0/include"
+            ],
+            "defines": [
+                "_WIN32"
+            ],
+            "compilerPath": "C:/Qt/Qt5.14.2/Tools/mingw730_64/bin/g++.exe",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-gcc-x64"
+        },
+        {
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",

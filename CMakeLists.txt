@@ -1,44 +1,76 @@
 cmake_minimum_required(VERSION 3.10)
 project(SimpleRtspServer)
 
-# 設定 C++ 標準 (建議使用 C++17 或更高)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# 引入 PkgConfig 工具，用來找 GStreamer
-find_package(PkgConfig REQUIRED)
+# ============================================================
+# 平台偵測：Windows vs Linux
+# ============================================================
+if(WIN32)
+    # Windows: 從環境變數或預設路徑找 GStreamer MinGW 版本
+    if(DEFINED ENV{GSTREAMER_1_0_ROOT_MINGW_X86_64})
+        set(GSTREAMER_ROOT "$ENV{GSTREAMER_1_0_ROOT_MINGW_X86_64}")
+    else()
+        set(GSTREAMER_ROOT "C:/Program Files/gstreamer/1.0/mingw_x86_64"
+            CACHE PATH "GStreamer MinGW installation root")
+    endif()
 
-# 檢查並載入 GStreamer 及其 RTSP Server 模組
-# 這裡對應指令列的: pkg-config --cflags --libs gstreamer-1.0 gstreamer-rtsp-server-1.0
-pkg_check_modules(GST REQUIRED gstreamer-1.0)
-pkg_check_modules(GST_RTSP REQUIRED gstreamer-rtsp-server-1.0)
+    # 路徑含空格時 MinGW 連結器會截斷，轉成 8.3 短路徑避免此問題
+    execute_process(
+        COMMAND powershell -NoProfile -Command
+            "$fso = New-Object -ComObject Scripting.FileSystemObject; $fso.GetFolder('${GSTREAMER_ROOT}').ShortPath"
+        OUTPUT_VARIABLE GSTREAMER_ROOT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    file(TO_CMAKE_PATH "${GSTREAMER_ROOT}" GSTREAMER_ROOT)
 
-# 定義執行檔名稱 (rtsp_server) 和來源檔案 (rtsp_server.cpp)
+    message(STATUS "Platform: Windows (MinGW)")
+    message(STATUS "GStreamer root (short path): ${GSTREAMER_ROOT}")
+
+    set(GST_INCLUDE_DIRS
+        "${GSTREAMER_ROOT}/include/gstreamer-1.0"
+        "${GSTREAMER_ROOT}/include/glib-2.0"
+        "${GSTREAMER_ROOT}/lib/glib-2.0/include"
+    )
+    set(GST_LIBRARIES
+        "${GSTREAMER_ROOT}/lib/libgstreamer-1.0.dll.a"
+        "${GSTREAMER_ROOT}/lib/libglib-2.0.dll.a"
+        "${GSTREAMER_ROOT}/lib/libgobject-2.0.dll.a"
+    )
+    set(GST_RTSP_INCLUDE_DIRS ${GST_INCLUDE_DIRS})
+    set(GST_RTSP_LIBRARIES
+        "${GSTREAMER_ROOT}/lib/libgstrtspserver-1.0.dll.a"
+    )
+else()
+    # Linux: 使用 PkgConfig
+    message(STATUS "Platform: Linux")
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(GST REQUIRED gstreamer-1.0)
+    pkg_check_modules(GST_RTSP REQUIRED gstreamer-rtsp-server-1.0)
+endif()
+
+# ============================================================
+# 編譯目標
+# ============================================================
+
+# --- RTSP Server ---
 add_executable(rtsp_server rtsp_server.cpp)
-
-# 加入標頭檔路徑 (Include Directories)
-target_include_directories(rtsp_server PRIVATE 
+target_include_directories(rtsp_server PRIVATE
     ${GST_INCLUDE_DIRS}
     ${GST_RTSP_INCLUDE_DIRS}
 )
-
-# 加入連結庫 (Link Libraries)
-target_link_libraries(rtsp_server PRIVATE 
+target_link_libraries(rtsp_server PRIVATE
     ${GST_LIBRARIES}
     ${GST_RTSP_LIBRARIES}
 )
 
 # --- RTSP Client ---
-# 定義客戶端執行檔 (rtsp_client) 和來源檔案 (rtsp_client.cpp)
 add_executable(rtsp_client rtsp_client.cpp)
-
-# 為客戶端加入標頭檔路徑
-target_include_directories(rtsp_client PRIVATE 
+target_include_directories(rtsp_client PRIVATE
     ${GST_INCLUDE_DIRS}
 )
-
-# 為客戶端加入連結庫
-target_link_libraries(rtsp_client PRIVATE 
+target_link_libraries(rtsp_client PRIVATE
     ${GST_LIBRARIES}
 )
-

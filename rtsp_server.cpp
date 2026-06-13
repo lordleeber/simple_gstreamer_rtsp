@@ -11,23 +11,31 @@
 static std::string build_pipeline() {
     std::ostringstream oss;
 
+#ifdef _WIN32
+    // Windows: 使用 mfvideosrc (Media Foundation)
+    // 輸出 raw video，由 videoconvert 轉換色彩空間供 x264enc 使用
     oss << "( "
-        // 影像來源：V4L2 攝影機輸出 MJPG，解碼後直接編碼，不在 server 端縮放
-        // client 端透過 nvvidconv caps 自行縮放至所需解析度
+        << "mfvideosrc device-index=" << VIDEO_DEVICE_INDEX << " ! "
+        << "video/x-raw,width=" << CAM_WIDTH
+        << ",height=" << CAM_HEIGHT
+        << ",framerate=" << VIDEO_FPS << "/1 ! "
+        << "videoconvert ! ";
+#else
+    // Linux: 使用 v4l2src，攝影機輸出 MJPG，解碼後轉換色彩空間
+    oss << "( "
         << "v4l2src device=" << VIDEO_DEVICE << " ! "
         << "image/jpeg,width=" << CAM_WIDTH
         << ",height=" << CAM_HEIGHT
         << ",framerate=" << VIDEO_FPS << "/1 ! "
         << "jpegdec ! "
+        << "videoconvert ! ";
+#endif
 
-        // 轉換色彩空間以供 x264enc 使用
-        << "videoconvert ! "
-
-        // H.264 軟體編碼
-        // tune=zerolatency : 最小化編碼延遲，配合接收端 latency=250
-        // speed-preset=ultrafast : 最快速度，降低 CPU 使用
-        // key-int-max : 控制 IDR 關鍵幀間隔
-        << "x264enc"
+    // 共用部分：H.264 編碼 + RTP 封包
+    // tune=zerolatency : 最小化編碼延遲，配合接收端 latency=250
+    // speed-preset=ultrafast : 最快速度，降低 CPU 使用
+    // key-int-max : 控制 IDR 關鍵幀間隔
+    oss << "x264enc"
         << " tune=zerolatency"
         << " speed-preset=ultrafast"
         << " bitrate=" << H264_BITRATE
