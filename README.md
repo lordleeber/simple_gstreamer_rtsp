@@ -1,11 +1,37 @@
 # 簡易 GStreamer RTSP 伺服器
 
 ## 專案簡介
-本專案使用 GStreamer 和 C++ 實作一個基礎的 RTSP (Real-Time Streaming Protocol) 伺服器。它可以將一個影像來源（預設使用 `videotestsrc` 進行除錯，或使用 `/dev/video0` 連接真實攝影機）透過 RTSP 進行串流，讓客戶端可以連接並觀看影像。
+本專案使用 GStreamer 和 C++ 實作一個基礎的 RTSP (Real-Time Streaming Protocol) 伺服器。它會擷取本機攝影機影像、以 H.264 編碼後透過 RTSP 進行串流，讓客戶端可以連接並觀看影像。程式會依平台自動選擇攝影機來源：
+
+| 平台 | 攝影機來源 |
+| --- | --- |
+| macOS | `avfvideosrc` (AVFoundation) |
+| Windows | `mfvideosrc` (Media Foundation) |
+| Linux | `v4l2src` (`/dev/video0`，MJPG) |
 
 ## 安裝與環境要求
 
 要編譯並執行此 RTSP 伺服器，您的系統需要安裝 GStreamer、其 RTSP 伺服器開發函式庫，以及相關的外掛程式。
+
+**適用於 macOS 的系統：**
+
+macOS 透過 [Homebrew](https://brew.sh) 安裝 GStreamer 及其外掛程式。攝影機來源使用 `avfvideosrc` (AVFoundation)。
+
+```bash
+# 安裝 GStreamer 全套件 (含 rtsp-server、avfvideosrc、x264enc 等) 與建置工具
+brew install gstreamer cmake pkg-config
+```
+
+> **攝影機權限：** 首次執行伺服器時，macOS 會要求授權終端機 (Terminal / iTerm) 存取攝影機。
+> 若未跳出提示或被拒絕，請至「系統設定 → 隱私權與安全性 → 相機」手動勾選你的終端機程式。
+
+確認 macOS 攝影機外掛可用：
+
+```bash
+gst-inspect-1.0 avfvideosrc   # 攝影機來源
+gst-inspect-1.0 x264enc       # H.264 編碼器
+gst-device-monitor-1.0 Video/Source   # 列出可用攝影機與支援解析度
+```
 
 **適用於 Debian/Ubuntu 的系統：**
 
@@ -74,6 +100,9 @@ cd build
 ## 連接客戶端
 
 您可以使用多種 RTSP 客戶端來連接串流，例如：
+
+> **區域網路連線：** 伺服器綁定 `0.0.0.0:8554`，同網段的其他裝置可用本機的 LAN IP 連接，
+> 例如 `rtsp://<本機IP>:8554/test`。在 macOS 上可用 `ipconfig getifaddr en0` 查詢本機 IP。
 
 *   **VLC 播放器：** 開啟「網路串流」並輸入 `rtsp://127.0.0.1:8554/test`。
 *   **GStreamer 的 `gst-launch-1.0`：**
