@@ -19,5 +19,5 @@
 #define VIDEO_FPS    30
 
 // 編碼參數
-#define H264_BITRATE    4000   // kbps
-#define H264_KEY_INT    30     // IDR 間隔 (frames)，對應 FPS 即約 1 秒一個關鍵幀
+#define H264_BITRATE    2000   // kbps
+#define H264_KEY_INT    10     // IDR 間隔 (frames)，對應 FPS 即約 0.33 秒一個關鍵幀
