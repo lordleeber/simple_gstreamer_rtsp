@@ -6,8 +6,11 @@
 #define RTSP_URL     "rtsp://" RTSP_HOST ":" RTSP_PORT RTSP_PATH
 
 // 影像來源
-#ifdef _WIN32
+#if defined(_WIN32)
     // Windows: Media Foundation 攝影機裝置索引 (0 = 第一顆攝影機)
+    #define VIDEO_DEVICE_INDEX 0
+#elif defined(__APPLE__)
+    // macOS: AVFoundation 攝影機裝置索引 (0 = 第一顆攝影機)
     #define VIDEO_DEVICE_INDEX 0
 #else
     // Linux: V4L2 裝置路徑

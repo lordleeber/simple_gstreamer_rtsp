@@ -6,6 +6,7 @@
 
 - **伺服器 (`rtsp_server`)**：擷取攝影機畫面，以 H.264 編碼後透過 RTSP 對外串流。
   - Windows：使用 `mfvideosrc`（Media Foundation）
+  - macOS：使用 `avfvideosrc`（AVFoundation）
   - Linux：使用 `v4l2src`（V4L2），攝影機需輸出 MJPG 格式
 - **客戶端 (`rtsp_client`)**：連接 RTSP 串流並顯示影像。
 
@@ -57,6 +58,26 @@ simple_gst_rtsp_proj/
    ```
 
    或設定系統環境變數 `GSTREAMER_1_0_ROOT_MINGW_X86_64` 指向 GStreamer 安裝根目錄，CMakeLists.txt 會自動讀取。
+
+### macOS（Homebrew）
+
+透過 [Homebrew](https://brew.sh) 安裝 GStreamer 及其外掛程式與建置工具。攝影機來源使用 `avfvideosrc`（AVFoundation）。
+
+```bash
+# 安裝 GStreamer 全套件（含 rtsp-server、avfvideosrc、x264enc 等）與建置工具
+brew install gstreamer cmake pkg-config
+```
+
+> **攝影機權限**：首次執行伺服器時，macOS 會要求授權終端機（Terminal / iTerm）存取攝影機。
+> 若未跳出提示或被拒絕，請至「系統設定 → 隱私權與安全性 → 相機」手動勾選你的終端機程式。
+
+確認 macOS 攝影機外掛可用：
+
+```bash
+gst-inspect-1.0 avfvideosrc          # 攝影機來源
+gst-inspect-1.0 x264enc              # H.264 編碼器
+gst-device-monitor-1.0 Video/Source  # 列出可用攝影機與支援解析度
+```
 
 ### Linux（Debian / Ubuntu）
 
@@ -149,6 +170,9 @@ RTSP Server running at rtsp://0.0.0.0:8554/test
 ---
 
 ## 連接其他客戶端
+
+> **區域網路連線**：伺服器綁定 `0.0.0.0:8554`，同網段的其他裝置可用本機的 LAN IP 連接，
+> 例如 `rtsp://<本機IP>:8554/test`。在 macOS 上可用 `ipconfig getifaddr en0` 查詢本機 IP。
 
 **VLC 播放器**：開啟「網路串流」，輸入：
 ```

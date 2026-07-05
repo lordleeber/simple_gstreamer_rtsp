@@ -44,11 +44,19 @@ if(WIN32)
         "${GSTREAMER_ROOT}/lib/libgstrtspserver-1.0.dll.a"
     )
 else()
-    # Linux: 使用 PkgConfig
-    message(STATUS "Platform: Linux")
+    # Linux / macOS: 使用 PkgConfig (macOS 透過 Homebrew 安裝的 gstreamer)
+    if(APPLE)
+        message(STATUS "Platform: macOS")
+    else()
+        message(STATUS "Platform: Linux")
+    endif()
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(GST REQUIRED gstreamer-1.0)
     pkg_check_modules(GST_RTSP REQUIRED gstreamer-rtsp-server-1.0)
+
+    # pkg-config 提供的函式庫名稱需搭配對應的搜尋路徑，
+    # macOS (Homebrew /opt/homebrew/lib) 不在預設連結路徑中，必須明確加入。
+    link_directories(${GST_LIBRARY_DIRS} ${GST_RTSP_LIBRARY_DIRS})
 endif()
 
 # ============================================================

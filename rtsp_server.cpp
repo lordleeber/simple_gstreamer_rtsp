@@ -11,7 +11,7 @@
 static std::string build_pipeline() {
     std::ostringstream oss;
 
-#ifdef _WIN32
+#if defined(_WIN32)
     // Windows: 使用 mfvideosrc (Media Foundation)
     // 擷取 JPEG，經 jpegdec 解碼後由 videoconvert 轉換色彩空間供 x264enc 使用
     oss << "( "
@@ -22,6 +22,15 @@ static std::string build_pipeline() {
         << ",height=" << CAM_HEIGHT
         << ",framerate=" << VIDEO_FPS << "/1 ! "
         << "jpegdec ! "
+        << "videoconvert ! ";
+#elif defined(__APPLE__)
+    // macOS: 使用 avfvideosrc (AVFoundation)
+    // MacBook 攝影機原生支援 1280x720，輸出 raw video 後由 videoconvert 轉換色彩空間
+    oss << "( "
+        << "avfvideosrc device-index=" << VIDEO_DEVICE_INDEX << " ! "
+        << "video/x-raw,width=" << CAM_WIDTH
+        << ",height=" << CAM_HEIGHT
+        << ",framerate=" << VIDEO_FPS << "/1 ! "
         << "videoconvert ! ";
 #else
     // Linux: 使用 v4l2src，攝影機輸出 MJPG，解碼後轉換色彩空間
