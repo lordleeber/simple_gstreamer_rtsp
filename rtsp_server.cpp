@@ -13,12 +13,15 @@ static std::string build_pipeline() {
 
 #if defined(_WIN32)
     // Windows: 使用 mfvideosrc (Media Foundation)
-    // 輸出 raw video，由 videoconvert 轉換色彩空間供 x264enc 使用
+    // 擷取 JPEG，經 jpegdec 解碼後由 videoconvert 轉換色彩空間供 x264enc 使用
     oss << "( "
-        << "mfvideosrc device-index=" << VIDEO_DEVICE_INDEX << " ! "
-        << "video/x-raw,width=" << CAM_WIDTH
+        // 使用 JPEG 輸出：1280x720 raw(YUY2) 最高只有 10fps，
+        // JPEG 格式才支援 30fps，避免相機降頻導致串流 freeze
+        << "mfvideosrc device-index=" << VIDEO_DEVICE_INDEX << " do-timestamp=true ! "
+        << "image/jpeg,width=" << CAM_WIDTH
         << ",height=" << CAM_HEIGHT
         << ",framerate=" << VIDEO_FPS << "/1 ! "
+        << "jpegdec ! "
         << "videoconvert ! ";
 #elif defined(__APPLE__)
     // macOS: 使用 avfvideosrc (AVFoundation)
@@ -41,17 +44,36 @@ static std::string build_pipeline() {
 #endif
 
     // 共用部分：H.264 編碼 + RTP 封包
-    // tune=zerolatency : 最小化編碼延遲，配合接收端 latency=250
-    // speed-preset=ultrafast : 最快速度，降低 CPU 使用
+    //
+    // tune 可選值（未設定則使用預設，啟用 lookahead + B-frame，畫質較佳但延遲較高）:
+    //   stillimage  : 靜態圖片優化，增加壓縮延遲，不適合串流
+    //   animation   : 卡通/平滑色塊動畫優化，對延遲無特別影響
+    //   grain       : 保留底片顆粒感，對延遲無特別影響
+    //   psnr        : 最大化 PSNR 指標（測試用），增加延遲
+    //   ssim        : 最大化 SSIM 指標（測試用），增加延遲
+    //   fastdecode  : 降低接收端解碼 CPU 用量，對編碼延遲無影響
+    //   zerolatency : 關閉 lookahead 與 B-frame，每幀立即輸出，延遲最低
+    //
+    // speed-preset 可選值（相對速度以 medium=1x 為基準；壓縮效率為同畫質下相對 veryslow 的額外 bitrate 開銷）:
+    //   ultrafast : ~16x，壓縮效率 -50%
+    //   superfast : ~10x，壓縮效率 -35%
+    //   veryfast  :  ~6x，壓縮效率 -22%
+    //   faster    : ~2.5x，壓縮效率 -18%（目前使用）
+    //   fast      : ~1.7x，壓縮效率 -14%
+    //   medium    :    1x，壓縮效率 -10%（預設值）
+    //   slow      : ~0.5x，壓縮效率  -5%
+    //   slower    : ~0.25x，壓縮效率 -3%
+    //   veryslow  : ~0.13x，壓縮效率  0%（最佳基準）
     // key-int-max : 控制 IDR 關鍵幀間隔
     oss << "x264enc"
         << " tune=zerolatency"
-        << " speed-preset=ultrafast"
+        << " speed-preset=faster"
         << " bitrate=" << H264_BITRATE
         << " key-int-max=" << H264_KEY_INT << " ! "
 
-        // 確保輸出 byte-stream 格式，h264parse 在接收端會處理格式轉換
-        << "video/x-h264,stream-format=byte-stream ! "
+        // h264parse : 正規化 H.264 bitstream，確保 NAL 對齊與 timestamp 正確，
+        //             對 nvv4l2decoder 等硬體解碼器的相容性較好
+        << "h264parse ! "
 
         // RTP 封包
         // config-interval=-1 : 每個 IDR frame 都附帶 SPS/PPS，
