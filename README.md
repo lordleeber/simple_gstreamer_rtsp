@@ -38,7 +38,7 @@ simple_gst_rtsp_proj/
 | `CAM_WIDTH` / `CAM_HEIGHT` | `1280 x 720` | 擷取解析度 |
 | `VIDEO_FPS` | `30` | 擷取幀率 |
 | `H264_BITRATE` | `2000` kbps | H.264 編碼位元率 |
-| `H264_KEY_INT` | `30` frames | IDR 關鍵幀間隔 |
+| `H264_KEY_INT` | `10` frames | IDR 關鍵幀間隔 |
 
 ---
 

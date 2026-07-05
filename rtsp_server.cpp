@@ -13,7 +13,7 @@ static std::string build_pipeline() {
 
 #ifdef _WIN32
     // Windows: 使用 mfvideosrc (Media Foundation)
-    // 輸出 raw video，由 videoconvert 轉換色彩空間供 x264enc 使用
+    // 擷取 JPEG，經 jpegdec 解碼後由 videoconvert 轉換色彩空間供 x264enc 使用
     oss << "( "
         // 使用 JPEG 輸出：1280x720 raw(YUY2) 最高只有 10fps，
         // JPEG 格式才支援 30fps，避免相機降頻導致串流 freeze
