@@ -53,11 +53,13 @@ simple_gst_rtsp_proj/
 4. **重要**：GStreamer 的 `bin` 目錄必須**置於** `PATH` 的最前面，否則可能因 DLL 版本衝突導致 plugin 載入失敗：
 
    ```powershell
-   # 臨時設定（PowerShell）
-   $env:PATH = "C:\gstreamer\1.0\mingw_x86_64\bin;" + $env:PATH
+   # 臨時設定（PowerShell）— 使用安裝時已設好的環境變數，不必寫死路徑
+   $env:PATH = "$env:GSTREAMER_1_0_ROOT_MINGW_X86_64\bin;" + $env:PATH
    ```
 
-   或設定系統環境變數 `GSTREAMER_1_0_ROOT_MINGW_X86_64` 指向 GStreamer 安裝根目錄，CMakeLists.txt 會自動讀取。
+   > GStreamer MinGW 安裝程式會自動設定 `GSTREAMER_1_0_ROOT_MINGW_X86_64` 指向安裝根目錄
+   > （預設 `C:\Program Files\gstreamer\1.0\mingw_x86_64`）。CMakeLists.txt 也會讀取此變數。
+   > 若要寫死路徑，請改成你實際的安裝位置，別直接抄範例路徑。
 
 ### macOS（Homebrew）
 
@@ -220,12 +222,17 @@ mingw32-make
 
 ### Windows：DLL 版本衝突 / plugin 無法載入
 
-**原因**：`PATH` 中存在多個 GStreamer 安裝（如 Qt 附帶的版本），系統載入了錯誤版本的 DLL。
+**症狀**：執行時出現
+`Failed to load plugin '...libgstmediafoundation.dll': The specified procedure could not be found.`
+接著一連串 `GStreamer-CRITICAL` 錯誤，`mfvideosrc` 無法建立。
 
-**解決**：確保目標 GStreamer 的 `bin` 路徑置於 `PATH` **最前面**：
+**原因**：`PATH` 上排在 GStreamer 前面的其他工具鏈（最常見是 **Qt 內附的 MinGW**，如 `C:\Qt\...\mingw73_64\bin`）提供了舊版的 `libstdc++-6.dll` / `libwinpthread-1.dll` / `libgcc_s_seh-1.dll`，被搶先載入，導致 GStreamer 新版 plugin 找不到需要的符號。
+（註：`gst-inspect-1.0` 檢查同一個 plugin 可能正常，因為它就在 `gstreamer\bin` 內，會優先載入正確的 DLL；但 `rtsp_server.exe` 在 `build\`，只能沿 PATH 找，才會撞到舊版。）
+
+**解決**：把 GStreamer 的 `bin` 置於 `PATH` **最前面**，讓它的 runtime DLL 勝出：
 
 ```powershell
-$env:PATH = "C:\gstreamer\1.0\mingw_x86_64\bin;" + $env:PATH
+$env:PATH = "$env:GSTREAMER_1_0_ROOT_MINGW_X86_64\bin;" + $env:PATH
 .\rtsp_server.exe
 ```
 
