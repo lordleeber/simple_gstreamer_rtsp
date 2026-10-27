@@ -229,6 +229,15 @@ static std::string build_pipeline(const StreamConfig &cfg, int cap_width, int ca
     // key-int-max : 控制 IDR 關鍵幀間隔
     // bitrate     : 單位 kbps（x264enc 與 x265enc 相同）
     if (cfg.codec == "h265") {
+#if defined(__APPLE__)
+        // macOS 的 GStreamer 通常沒有 x265enc plugin，改用 Apple VideoToolbox 硬體編碼；
+        // 關閉 frame reordering（無 B-frame）並啟用 realtime，維持低延遲
+        oss << "vtenc_h265"
+            << " realtime=true allow-frame-reordering=false"
+            << " bitrate=" << cfg.bitrate
+            << " max-keyframe-interval=" << VIDEO_KEY_INT << " ! "
+            << "h265parse ! "
+#else
         // x265 比 x264 慢數倍，即時編碼使用 ultrafast（x265 不會因此降 profile，仍為 Main）
         oss << "x265enc"
             << " tune=zerolatency"
@@ -236,6 +245,7 @@ static std::string build_pipeline(const StreamConfig &cfg, int cap_width, int ca
             << " bitrate=" << cfg.bitrate
             << " key-int-max=" << VIDEO_KEY_INT << " ! "
             << "h265parse ! "
+#endif
             // pt=98 : 對齊 D80 實機（H.264 用 96，H.265 用 98）
             << "rtph265pay name=pay0 pt=98 config-interval=-1"
             << " )";
