@@ -4,7 +4,7 @@
 
 本專案使用 GStreamer 和 C++ 實作一個跨平台的 RTSP (Real-Time Streaming Protocol) 伺服器與客戶端。
 
-- **伺服器 (`rtsp_server`)**：擷取攝影機畫面，以 H.264 編碼後透過 RTSP 對外串流。
+- **伺服器 (`rtsp_server`)**：擷取攝影機畫面，以 H.264 或 H.265 編碼後透過 RTSP 對外串流，模擬 D80 攝影機（見下方實機規格）。
   - Windows：使用 `mfvideosrc`（Media Foundation）
   - macOS：使用 `avfvideosrc`（AVFoundation）
   - Linux：使用 `v4l2src`（V4L2），攝影機需輸出 MJPG 格式
@@ -124,7 +124,8 @@ skai-edge2 把 `10.223.1.115` 這台稱為 **D80**，同一份紀錄（`TODO.md`
 
 ```
 simple_gst_rtsp_proj/
-├── rtsp_config.h      # 共用設定（主機、埠號、路徑、影像參數）
+├── config.yaml        # 串流參數（codec、解析度、幀率、位元率），執行時讀取
+├── rtsp_config.h      # 編譯期設定（主機、埠號、路徑、攝影機裝置、GOP）
 ├── rtsp_server.cpp    # RTSP 伺服器主程式
 ├── rtsp_client.cpp    # RTSP 客戶端主程式
 ├── CMakeLists.txt     # 跨平台 CMake 建置腳本
@@ -133,19 +134,37 @@ simple_gst_rtsp_proj/
 
 ## 設定
 
-所有串流參數統一在 `rtsp_config.h` 設定：
+### `config.yaml`（執行時讀取，改完重啟即可，不用重新編譯）
+
+| 參數 | 可選值 | 預設值 | 說明 |
+|---|---|---|---|
+| `codec` | `h264` / `h265` | `h264` | H.264 High（x264 `veryfast`，RTP pt 96）/ H.265 Main（x265 `ultrafast`，RTP pt 98） |
+| `resolution` | `1080p` / `720p` | `1080p` | 輸出解析度 1920x1080 / 1280x720 |
+| `fps` | `25` / `30` | `30` | 輸出幀率；攝影機固定以 30fps 擷取，25 時由 `videorate` 轉換 |
+| `bitrate` | `512` ~ `2048` | `2048` | 編碼位元率 (kbps) |
+
+設定檔位置：
+
+- `./rtsp_server <路徑>` 指定設定檔
+- 未指定時依序找**目前目錄**與**原始碼目錄**的 `config.yaml`（所以從 `build/` 執行也讀得到）
+- 都找不到時使用預設值；數值不合法時印出錯誤並結束
+
+**攝影機解析度不足時**：啟動時會先以輸出解析度試開攝影機（抓到 1 幀才算成功），失敗則退回 1280x720 擷取，
+再以 `videoscale`（CPU）放大到輸出解析度。例如筆電內建鏡頭只有 720p 時，仍可輸出 1080p。
+
+### `rtsp_config.h`（編譯期設定）
 
 | 參數 | 預設值 | 說明 |
 |---|---|---|
 | `RTSP_HOST` | `0.0.0.0` | 伺服器監聽位址 |
-| `RTSP_PORT` | `8554` | 伺服器監聽埠號 |
-| `RTSP_PATH` | `/test` | 串流路徑 |
-| `VIDEO_DEVICE_INDEX` | `0` | 攝影機索引（Windows） |
+| `RTSP_PORT` | `554` | 伺服器監聽埠號（與 D80 相同） |
+| `RTSP_PATH` | `/` | 串流路徑（與 D80 相同，URL 只需 `rtsp://<IP>`） |
+| `VIDEO_DEVICE_INDEX` | `0` | 攝影機索引（Windows / macOS） |
 | `VIDEO_DEVICE` | `/dev/video0` | 攝影機裝置（Linux） |
-| `CAM_WIDTH` / `CAM_HEIGHT` | `1280 x 720` | 擷取解析度 |
-| `VIDEO_FPS` | `30` | 擷取幀率 |
-| `H264_BITRATE` | `2000` kbps | H.264 編碼位元率 |
-| `H264_KEY_INT` | `10` frames | IDR 關鍵幀間隔 |
+| `CAM_FPS` | `30` | 攝影機擷取幀率 |
+| `VIDEO_KEY_INT` | `60` frames | IDR 關鍵幀間隔（與 D80 相同，30fps 下 2 秒） |
+
+所有編碼都使用 `tune=zerolatency`（無 B-frame），且每個 IDR 前附帶 SPS/PPS（`config-interval=-1`）。
 
 ---
 
@@ -172,7 +191,7 @@ simple_gst_rtsp_proj/
 透過 [Homebrew](https://brew.sh) 安裝 GStreamer 及其外掛程式與建置工具。攝影機來源使用 `avfvideosrc`（AVFoundation）。
 
 ```bash
-# 安裝 GStreamer 全套件（含 rtsp-server、avfvideosrc、x264enc 等）與建置工具
+# 安裝 GStreamer 全套件（含 rtsp-server、avfvideosrc、x264enc、x265enc 等）與建置工具
 brew install gstreamer cmake pkg-config
 ```
 
@@ -184,6 +203,7 @@ brew install gstreamer cmake pkg-config
 ```bash
 gst-inspect-1.0 avfvideosrc          # 攝影機來源
 gst-inspect-1.0 x264enc              # H.264 編碼器
+gst-inspect-1.0 x265enc              # H.265 編碼器
 gst-device-monitor-1.0 Video/Source  # 列出可用攝影機與支援解析度
 ```
 
@@ -213,6 +233,7 @@ sudo apt-get install -y gstreamer1.0-tools
 
 ```bash
 gst-inspect-1.0 x264enc
+gst-inspect-1.0 x265enc
 gst-inspect-1.0 v4l2src
 gst-inspect-1.0 videotestsrc
 ```
@@ -251,19 +272,34 @@ make
 ### 啟動伺服器
 
 ```bash
-# Linux
+# Linux：554 為特權 port，需要 root
+sudo ./rtsp_server
+# 或授權一次後以一般使用者執行（每次重新編譯後要再授權）
+sudo setcap cap_net_bind_service=+ep ./rtsp_server
 ./rtsp_server
 
-# Windows（PowerShell）
+# 指定設定檔
+./rtsp_server ../config.yaml
+
+# macOS（10.14 起綁定 0.0.0.0 的 554 不需要 root）
+./rtsp_server
+
+# Windows（PowerShell，無特權 port 限制；首次執行可能跳出防火牆提示）
 .\rtsp_server.exe
 ```
 
-伺服器啟動後會印出 pipeline 內容與串流 URL：
+伺服器啟動後會印出設定、攝影機擷取結果、pipeline 內容與串流 URL：
 
 ```
-[Pipeline] ( mfvideosrc device-index=0 ! ... )
-RTSP Server running at rtsp://0.0.0.0:8554/test
+[Config] loaded config.yaml
+[Config] codec=h264 resolution=1920x1080 fps=30 bitrate=2048kbps
+[Camera] probing 1920x1080@30fps ...
+[Pipeline] ( v4l2src device=/dev/video0 ! ... )
+RTSP Server running at rtsp://0.0.0.0:554/
 ```
+
+若攝影機只支援 720p，會多印出 `[Camera] capture 1280x720, upscale to 1920x1080`。
+若出現 `Failed to bind 0.0.0.0:554`，表示 port 被佔用或沒有綁定 554 的權限。
 
 ### 啟動客戶端
 
@@ -279,24 +315,24 @@ RTSP Server running at rtsp://0.0.0.0:8554/test
 
 ## 連接其他客戶端
 
-> **區域網路連線**：伺服器綁定 `0.0.0.0:8554`，同網段的其他裝置可用本機的 LAN IP 連接，
-> 例如 `rtsp://<本機IP>:8554/test`。在 macOS 上可用 `ipconfig getifaddr en0` 查詢本機 IP。
+> **區域網路連線**：伺服器綁定 `0.0.0.0:554`，同網段的其他裝置可用本機的 LAN IP 連接，
+> 例如 `rtsp://<本機IP>`（與連 D80 的寫法相同，skai-edge / skai-edge2 只需把 IP 換成本機）。在 macOS 上可用 `ipconfig getifaddr en0` 查詢本機 IP。
 
 **VLC 播放器**：開啟「網路串流」，輸入：
 ```
-rtsp://127.0.0.1:8554/test
+rtsp://127.0.0.1
 ```
 
 **gst-launch-1.0：**
 ```bash
-gst-launch-1.0 rtspsrc location=rtsp://127.0.0.1:8554/test ! decodebin ! autovideosink
+gst-launch-1.0 rtspsrc location=rtsp://127.0.0.1 ! decodebin ! autovideosink
 ```
 
 **Python OpenCV：**
 ```python
 import cv2
 
-cap = cv2.VideoCapture("rtsp://127.0.0.1:8554/test")
+cap = cv2.VideoCapture("rtsp://127.0.0.1")
 
 while cap.isOpened():
     ret, frame = cap.read()
