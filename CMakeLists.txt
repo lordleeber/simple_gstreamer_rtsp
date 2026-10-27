@@ -65,6 +65,8 @@ endif()
 
 # --- RTSP Server ---
 add_executable(rtsp_server rtsp_server.cpp)
+# 未指定設定檔時，可退回原始碼目錄下的 config.yaml（從 build/ 執行時適用）
+target_compile_definitions(rtsp_server PRIVATE RTSP_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_include_directories(rtsp_server PRIVATE
     ${GST_INCLUDE_DIRS}
     ${GST_RTSP_INCLUDE_DIRS}

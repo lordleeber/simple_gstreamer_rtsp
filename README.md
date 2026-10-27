@@ -14,6 +14,112 @@
 
 ---
 
+## D80N 實機串流規格
+
+本專案用來在任何有 webcam 的電腦上模擬 D80N RTSP 攝影機，預設參數皆對齊下表。
+以下為 2026-10-27 對實機 `rtsp://10.223.1.115` 實測結果（`DESCRIBE` / `gst-discoverer-1.0` / 擷取 14 秒串流統計）：
+
+| 項目 | 實測值 |
+|---|---|
+| RTSP 伺服器 | `lal 0.37.4`，port 554，根路徑（URL 只需 `rtsp://<IP>`），無認證 |
+| 支援方法 | DESCRIBE, ANNOUNCE, SETUP, PLAY, PAUSE, RECORD, TEARDOWN |
+| 傳輸 | RTP over UDP 與 TCP (interleaved) 皆可 |
+| Codec | H.264 High Profile, Level 5.2 |
+| RTP | payload type 96, `packetization-mode=1` |
+| SDP | 含 `sprop-parameter-sets`，track control 為 `streamid=0` |
+| 解析度 | 1920x1080，4:2:0，8-bit，progressive |
+| 幀率 | 30 fps |
+| GOP | 固定 60 frames（每 2 秒一個 IDR），IDR 前附 SPS/PPS |
+| B-frame | 無（PTS 單調遞增、無 DTS） |
+| Bitrate | 平均約 2150 kbps；I-frame 約 190 KB、P-frame 約 5 KB |
+
+SDP 原文：
+
+```
+v=0
+o=- 0 0 IN IP4 127.0.0.1
+s=No Name
+c=IN IP4 127.0.0.1
+t=0 0
+a=tool:lal 0.37.4
+m=video 0 RTP/AVP 96
+a=rtpmap:96 H264/90000
+a=fmtp:96 packetization-mode=1; sprop-parameter-sets=J2QANKwbGqB4AiflmyAAAAMAIAAAB4HixNQ=,KO4C3LA=; profile-level-id=640016
+a=control:streamid=0
+```
+
+### 改成 H.265 720p30 512 kbps 後的實測
+
+使用者在實機設定改成 `H.265 / 720p / 30fps / 512 kbps` 後重新測量（2026-10-27）：
+
+| 項目 | 實測值 |
+|---|---|
+| Codec | H.265 Main Profile, Main tier, Level 6（SPS 宣告值） |
+| RTP | **payload type 98**（H.264 時為 96） |
+| SDP | `fmtp` 帶 `profile-id=1` 與 `sprop-vps` / `sprop-sps` / `sprop-pps` |
+| 解析度 / 幀率 | 1280x720，30 fps |
+| GOP | 仍為固定 60 frames（2 秒） |
+| B-frame | 無（PTS 單調遞增、無 DTS） |
+| Bitrate | 平均約 524 kbps；I-frame 約 51 KB、P-frame 約 1.3 KB |
+| 傳輸 | UDP 與 TCP 皆可 |
+
+```
+m=video 0 RTP/AVP 98
+a=rtpmap:98 H265/90000
+a=fmtp:98 profile-id=1;sprop-sps=QgEBAUAAAAMAgAAAAwAAAwC0oAKAgC0WWuSytmuXE2BAAAADAEAAAAeP4sSg;sprop-pps=RAHA4IDwMyQ=;sprop-vps=QAEMAf//AUAAAAMAgAAAAwAAAwC0rAk=
+a=control:streamid=0
+```
+
+## 客戶端使用方式
+
+模擬器要讓以下兩個客戶端「只換 IP 就能用」。
+
+### skai-edge（ROS 2 / Python，`~/poyi/skai-edge`）
+
+`video_source_node` → `utils/video_grabber.py`：
+
+- 先自己送一個**無認證**的 `DESCRIBE`（未指定 port 時用 554），SDP 的 `a=rtpmap` 為 `H265/` 時走 H.265，其他一律 H.264
+- 接收 pipeline：
+  `rtspsrc protocols=udp+tcp latency=500 timeout=5000000 ! rtp{h264,h265}depay wait-for-keyframe=true request-keyframe=true ! {h264,h265}parse ! nvv4l2decoder ! nvvidconv ! BGRx ! videoconvert ! BGR ! appsink drop=true`
+- 解碼後統一縮放至設定解析度（`camera_config.yaml` 預設 1920x1080、30 fps）
+- 只用解碼後的畫面做推論，不轉送原始 bitstream
+- 另有 D80N 雲台控制（`utils/d80n_controller.py`，私有協定，UDP 2337/2338 或 TCP 2332），預設 `gimbal_enable: false`，**本模擬器未實作**
+
+### skai-edge2（C++17 單一執行檔，`~/poyi/skai-edge2`）
+
+`src/video/rtsp_source.cpp`，設定在 `config.yaml` 的 `video:`：
+
+- `rtspsrc` 參數：`transport` 目前預設 **`tcp`**（只用一種）、`latency_ms` 100，可設 `username` / `password`；
+  **之後會改成跟 skai-edge 一樣先試 UDP、失敗再退回 TCP**，所以模擬器兩種傳輸都要支援
+- codec 由 `rtspsrc` pad 的 RTP caps `encoding-name` 判斷，只接受 `H264` / `H265`
+- pipeline：`rtp{h264,h265}depay ! {h264,h265}parse config-interval=-1 ! byte-stream,au ! tee`
+  - 解碼支線：`nvv4l2decoder`（沒有時用 `avdec_h264/h265`）→ BGR → 推論；H.264 會設 `disable-dpb=true`，
+    **有 B-frame 時畫面順序會錯**（不會報錯），所以來源不能有 B-frame
+  - 原始 bitstream 支線（**不重新編碼**，直接轉送）：
+    - **Agora**：只送 H.264，**H.265 會整個略過**（Skai 網頁的 Agora Web SDK 播不了 H.265）
+    - **WebRTC (WHEP)**：照來源 codec 協商，H.265 要觀看端瀏覽器支援；從下一張 IDR 開始送，丟包也等下一張 IDR
+    - **MP4 分段錄影**：分段只能在 IDR 切，所以 GOP 決定最短分段長度
+- 斷線偵測：`stall_timeout_ms` 3 秒沒畫面就重連；`first_frame_timeout_ms` 預設 35 秒（為了容忍 30 秒 GOP 的 camera）
+
+skai-edge2 把 `10.223.1.115` 這台稱為 **D80**，同一份紀錄（`TODO.md`）另有 **D80 Pro**（`10.223.1.111`，大華方案）可對照：
+
+| | D80（本模擬器目標） | D80 Pro |
+|---|---|---|
+| H.264 | High L5.2，1080p30，1 個參考幀 | High L5.0，1080p24，2 個參考幀 |
+| 位元率 | 約 2.1 Mbps | VBR 0.06–1.4 Mbps |
+| GOP | 2 秒 | 預設約 30 秒（`SmartEncode`），已關閉改回 2 秒 |
+| SPS `bitstream_restriction` | 有，`max_dec_frame_buffering=1` | 沒有 → iPhone WebRTC 黑畫面 |
+
+### 對模擬器的要求
+
+- port 554、根路徑、不需認證，UDP 與 TCP 都要能拉
+- 不能有 B-frame（`tune=zerolatency`）；IDR 前要帶 SPS/PPS（`config-interval=-1`）
+- GOP 維持 2 秒左右，否則首畫面、錄影分段、WebRTC 恢復都會變慢
+- SPS 需帶 `bitstream_restriction`（x264 預設會寫），否則 iPhone 播不出來
+- `codec: h265` 只適合測 H.265 路徑：skai-edge2 的 Agora 會停止送流
+
+---
+
 ## 專案結構
 
 ```
